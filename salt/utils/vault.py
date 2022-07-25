@@ -207,6 +207,14 @@ def write_cache(connection):
     """
     Write the vault token to cache
     """
+    # Detect if token was issued without use limit
+    # This method is not called after decrementing uses sets it to <= 0, so the flag can safely be set
+    # Otherwise, session stored tokens are never re-used
+    if connection.get("uses") == 0:
+        connection["unlimited_use_token"] = True
+    else:
+        connection["unlimited_use_token"] = False
+
     # If uses is 1 and unlimited_use_token is not true, then this is a single use token and should not be cached
     # In that case, we still want to cache the vault metadata lookup information for paths, so continue on
     if (
@@ -233,11 +241,6 @@ def write_cache(connection):
     cache_file = os.path.join(__opts__["cachedir"], "salt_vault_token")
     try:
         log.debug("Writing vault cache file")
-        # Detect if token was issued without use limit
-        if connection.get("uses") == 0:
-            connection["unlimited_use_token"] = True
-        else:
-            connection["unlimited_use_token"] = False
         with salt.utils.files.fpopen(temp_file, "w", mode=0o600) as fp_:
             fp_.write(salt.utils.json.dumps(connection))
         os.close(temp_fp)
