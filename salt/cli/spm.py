@@ -7,6 +7,7 @@
 .. versionadded:: 2015.8.0
 """
 
+import sys
 
 import salt.spm
 import salt.utils.parsers as parsers
@@ -33,4 +34,4 @@ class SPM(parsers.SPMParser):
             root_dir=self.config["root_dir"],
         )
         client = salt.spm.SPMClient(ui, self.config)
-        client.run(self.args)
+        sys.exit(client.run(self.args))

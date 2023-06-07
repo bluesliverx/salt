@@ -46,6 +46,7 @@ EXPECTED_VARIABLES = (
     "SPM_PARENT_PATH",
     "SPM_FORMULA_PATH",
     "SPM_PILLAR_PATH",
+    "SPM_MODULE_PATH",
     "SPM_REACTOR_PATH",
     "SHARE_DIR",
 )
@@ -217,6 +218,10 @@ SPM_FORMULA_PATH = __generated_syspaths.SPM_FORMULA_PATH
 if SPM_FORMULA_PATH is None:
     SPM_FORMULA_PATH = os.path.join(SPM_PARENT_PATH, "salt")
 
+SPM_MODULE_PATH = __generated_syspaths.SPM_MODULE_PATH
+if SPM_MODULE_PATH is None:
+    SPM_MODULE_PATH = os.path.join(SPM_PARENT_PATH, "modules")
+
 SPM_PILLAR_PATH = __generated_syspaths.SPM_PILLAR_PATH
 if SPM_PILLAR_PATH is None:
     SPM_PILLAR_PATH = os.path.join(SPM_PARENT_PATH, "pillar")
@@ -249,6 +254,7 @@ __all__ = [
     "BOOTSTRAP",
     "SPM_PARENT_PATH",
     "SPM_FORMULA_PATH",
+    "SPM_MODULE_PATH",
     "SPM_PILLAR_PATH",
     "SPM_REACTOR_PATH",
 ]

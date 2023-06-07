@@ -291,6 +291,8 @@ state modules
     solrcloud
     splunk
     splunk_search
+    spm
+    spmrepo
     sqlite3
     ssh_auth
     ssh_known_hosts

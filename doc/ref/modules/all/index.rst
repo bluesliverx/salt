@@ -445,6 +445,7 @@ execution modules
     solrcloud
     splunk
     splunk_search
+    spm
     sqlite3
     ssh
     ssh_pkg

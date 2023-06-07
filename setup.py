@@ -277,6 +277,7 @@ class GenerateSaltSyspaths(Command):
                 logs_dir=self.distribution.salt_logs_dir,
                 pidfile_dir=self.distribution.salt_pidfile_dir,
                 spm_parent_path=self.distribution.salt_spm_parent_dir,
+                spm_module_path=self.distribution.salt_spm_module_dir,
                 spm_formula_path=self.distribution.salt_spm_formula_dir,
                 spm_pillar_path=self.distribution.salt_spm_pillar_dir,
                 spm_reactor_path=self.distribution.salt_spm_reactor_dir,
@@ -583,6 +584,7 @@ LIB_STATE_DIR = {lib_state_dir!r}
 LOGS_DIR = {logs_dir!r}
 PIDFILE_DIR = {pidfile_dir!r}
 SPM_PARENT_PATH = {spm_parent_path!r}
+SPM_MODULE_PATH = {spm_module_path!r}
 SPM_FORMULA_PATH = {spm_formula_path!r}
 SPM_PILLAR_PATH = {spm_pillar_path!r}
 SPM_REACTOR_PATH = {spm_reactor_path!r}
@@ -832,6 +834,7 @@ class SaltDistribution(distutils.dist.Distribution):
         self.salt_logs_dir = None
         self.salt_pidfile_dir = None
         self.salt_spm_parent_dir = None
+        self.salt_spm_module_dir = None
         self.salt_spm_formula_dir = None
         self.salt_spm_pillar_dir = None
         self.salt_spm_reactor_dir = None
