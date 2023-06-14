@@ -26,8 +26,8 @@ def formula_contents(formula_definition):
             "FORMULA",
             (
                 "name: {name}\n"
-                "version: {version}\n"
-                "release: {release}\n"
+                "version: '{version}'\n"
+                "release: '{release}'\n"
                 "summary: {summary}\n"
                 "description: {description}"
             ).format(**formula_definition),
@@ -40,9 +40,31 @@ def formula_contents(formula_definition):
 
 
 @pytest.fixture
+def invalid_formula_contents(formula_definition):
+    return (
+        (
+            "FORMULA",
+            (
+                "name: {name}\n"
+                "version: {version}\n"
+                "release: {release}\n"
+                "description: {description}"
+            ).format(**formula_definition),
+        ),
+    )
+
+
+@pytest.fixture
 def formula(formula_definition, formula_contents):
     return types.SimpleNamespace(
         definition=formula_definition, contents=formula_contents
+    )
+
+
+@pytest.fixture
+def invalid_formula(formula_definition, invalid_formula_contents):
+    return types.SimpleNamespace(
+        definition=formula_definition, contents=invalid_formula_contents
     )
 
 
@@ -119,9 +141,34 @@ def formulas_dir(formula, tmp_path):
     return str(fdir)
 
 
+@pytest.fixture
+def invalid_formulas_dir(invalid_formula, tmp_path):
+    fdir = tmp_path / invalid_formula.definition["name"]
+    fdir.mkdir()
+    for path, contents in invalid_formula.contents:
+        path = fdir / path
+        dirname, _ = os.path.split(str(path))
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+        path.write_text(contents)
+    return str(fdir)
+
+
+def test_build_install_invalid_formula(client, invalid_formulas_dir):
+    client.run(["build", invalid_formulas_dir])
+    assert not client.ui._status
+    assert client.ui._error == [
+        "Missing FORMULA fields: summary; "
+        "Incorrect FORMULA field types: "
+        "version (expected: str, actual: float), "
+        "release (expected: str, actual: int)"
+    ]
+
+
 def test_build_install(client, formulas_dir, minion_config, formula):
     # Build package
     client.run(["build", formulas_dir])
+    assert not client.ui._error
     pkgpath = client.ui._status[-1].split()[-1]
     assert os.path.exists(pkgpath)
     # Install package
