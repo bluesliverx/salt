@@ -1,11 +1,12 @@
 import os
+import tarfile
 import types
 
 import pytest
 
 import salt.spm
 import salt.utils.files
-from tests.support.mock import patch
+from tests.support.mock import create_autospec, patch
 
 
 @pytest.fixture
@@ -240,3 +241,50 @@ def test_repo_paths(client, formulas_dir):
 def test_failure_paths(client, fail_args):
     client.run(fail_args)
     assert len(client.ui._error) > 0
+
+
+@pytest.mark.parametrize(
+    "formula_exclude, member, result",
+    [
+        (None, None, None),
+        (None, 1, None),
+        (None, True, None),
+        (None, "", False),
+        # Excluded by the opts
+        (None, ".git", False),
+        (None, "formula1/included", False),
+        (None, "formula1/.gitfs", True),
+        (None, "formula1/.git", True),
+        (None, "/path1/included", False),
+        (None, "/path1/.gitfs", True),
+        (None, "/path1/.git", True),
+        # Excluded by the formula
+        ([r"exclude\d"], "test1", False),
+        ([r"exclude\d"], "exclude1", False),
+        ([r"exclude\d"], "formula1/include1", False),
+        ([r"exclude\d"], "formula1/exclude1", True),
+        ([r"exclude\d"], "formula1/exclude12", True),
+        ([r"exclude\d"], "formula1/excluded", False),
+        ([r"exclude\d"], "/path1/include1", False),
+        ([r"exclude\d"], "/path1/exclude1", True),
+        ([r"exclude\d"], "/path1/exclude12", True),
+        ([r"exclude\d"], "/path1/excluded", False),
+        ([r"exclude\d", "all"], "/path1/all-excluded", True),
+    ],
+)
+def test_exclude(formula_exclude, member, result, client):
+    client.formula_conf = {"name": "formula1"}
+    if formula_exclude:
+        client.formula_conf["spm_build_exclude"] = formula_exclude
+    client.abspath = "/path1"
+
+    # Exclude string matching
+    # pylint: disable=protected-access
+    assert client._exclude(member) is result
+
+    # Exclude tarinfo matching if the member is a valid string
+    if isinstance(member, str):
+        tar_info = create_autospec(tarfile.TarInfo)
+        tar_info.name = member
+        tar_result = None if result in (None, True) else tar_info
+        assert client._exclude(tar_info) is tar_result
