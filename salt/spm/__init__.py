@@ -5,12 +5,14 @@ This module provides the point of entry to SPM, the Salt Package Manager
 """
 
 import hashlib
+import io
 import logging
 import os
 import re
 import shutil
 import sys
 import tarfile
+import time
 
 import salt.cache
 import salt.client
@@ -46,47 +48,48 @@ FILE_TYPES = ("c", "d", "g", "l", "r", "s", "m")
 FORMULA_FIELDS = {
     "name": {
         "description": "SPM name",
-        "type": str,
+        "types": [str],
         "required": True,
     },
     "version": {
         "description": "Version of the SPM",
-        "type": str,
+        "types": [str, int, float],
         "required": True,
     },
     "release": {
         "description": "Release of the SPM",
-        "type": str,
+        "types": [str, int, float],
         "required": True,
     },
     "summary": {
         "description": "One-line summary of what the SPM does",
-        "type": str,
+        "types": [str],
         "required": True,
     },
     "description": {
         "description": "Verbose description of the SPM",
-        "type": str,
+        "types": [str],
         "required": True,
     },
     "files": {
         "description": "Files that should be included in the SPM",
-        "type": list,
+        "types": [list],
         "required": False,
-        "dont_leak": True,
+        "formula_exclude": True,
     },
     "spm_build_exclude": {
         "description": "Regular expressions of files to exclude from the SPM",
+        "types": [list],
         "required": False,
-        "dont_leak": True,
+        "formula_exclude": True,
     },
 }
 
 REQUIRED_FORMULA_FIELDS = [
     _field for _field, _info in FORMULA_FIELDS.items() if _info.get("required")
 ]
-DONT_LEAK_FORMULA_FIELDS = [
-    _field for _field, _info in FORMULA_FIELDS.items() if _info.get("dont_leak")
+FORMULA_EXCLUDED_FIELDS = [
+    _field for _field, _info in FORMULA_FIELDS.items() if _info.get("formula_exclude")
 ]
 
 
@@ -112,7 +115,7 @@ class SPMFormulaError(SPMException):
             msgs.append(f"Missing FORMULA fields: {', '.join(self.missing)}")
         if self.bad_types:
             type_messages = [
-                f"{fn} (expected: {str(FORMULA_FIELDS[fn]['type'].__name__)}, actual: {ft.__name__})"
+                f"{fn} (expected: {'|'.join(tp.__name__ for tp in FORMULA_FIELDS[fn]['types'])}, actual: {ft.__name__})"
                 for fn, ft in self.bad_types.items()
             ]
             msgs.append(f"Incorrect FORMULA field types: {', '.join(type_messages)}")
@@ -151,13 +154,50 @@ def verify_formula(formula):
     bad_types = {}
     for fname, finfo in FORMULA_FIELDS.items():
         if fname in formula:
-            if not isinstance(formula[fname], finfo["type"]):
+            if all(not isinstance(formula[fname], etype) for etype in finfo["types"]):
                 bad_types[fname] = type(formula[fname])
         elif finfo.get("required"):
             missing.append(fname)
 
     if missing or bad_types:
         raise SPMFormulaError(missing=missing, bad_types=bad_types)
+
+
+def spm_create(path, formula_conf):
+    """
+    Write the FORMULA file detailed by formula_conf to an SPM tar object
+    """
+
+    verify_formula(formula_conf)
+
+    now = time.time()
+    _formula_conf = {
+        k: v for k, v in formula_conf.items() if k not in FORMULA_EXCLUDED_FIELDS
+    }
+
+    try:
+        tarobj = tarfile.open(path, "w:bz2")
+    except Exception as err:
+        raise SPMPackageError(f"Failed to create SPM: {path}: {err}")
+
+    fdir = tarfile.TarInfo(_formula_conf["name"])
+    fdir.type = tarfile.DIRTYPE
+    fdir.mode = 0o0755
+    fdir.mtime = now
+    tarobj.addfile(fdir)
+
+    fpath = "{}/FORMULA".format(_formula_conf["name"])
+    fc_str = salt.utils.yaml.safe_dump(_formula_conf, default_flow_style=False) + "\n"
+    fc_fobj = io.BytesIO(bytes(fc_str, "utf-8"))
+    ffile = tarfile.TarInfo(fpath)
+    ffile.size = len(fc_str)
+    ffile.type = tarfile.REGTYPE
+    ffile.mode = 0o0444
+    ffile.mtime = now
+    tarobj.addfile(ffile, fc_fobj)
+    fc_fobj.close()
+
+    return tarobj
 
 
 class SPMClient:
@@ -1164,7 +1204,7 @@ class SPMClient:
 
         self.formula_conf = formula_conf
 
-        formula_tar = tarfile.open(out_path, "w:bz2")
+        formula_tar = spm_create(out_path, formula_conf)
 
         if "files" in formula_conf:
             # This allows files to be added to the SPM file in a specific order.
@@ -1172,9 +1212,6 @@ class SPMClient:
             # RPM files. This tag is ignored here, but is used when installing
             # the SPM file.
             if isinstance(formula_conf["files"], list):
-                formula_dir = tarfile.TarInfo(formula_conf["name"])
-                formula_dir.type = tarfile.DIRTYPE
-                formula_tar.addfile(formula_dir)
                 for file_ in formula_conf["files"]:
                     for ftype in FILE_TYPES:
                         if file_.startswith(f"{ftype}|"):
@@ -1187,15 +1224,9 @@ class SPMClient:
             # If no files are specified, then the whole directory will be added.
             try:
                 formula_tar.add(
-                    formula_path, formula_conf["name"], filter=self._exclude
-                )
-                formula_tar.add(
                     self.abspath, formula_conf["name"], filter=self._exclude
                 )
             except TypeError:
-                formula_tar.add(
-                    formula_path, formula_conf["name"], exclude=self._exclude
-                )
                 formula_tar.add(
                     self.abspath, formula_conf["name"], exclude=self._exclude
                 )
@@ -1217,6 +1248,15 @@ class SPMClient:
             ret_include = member
         else:
             return None
+
+        print(f"mpath: {mpath}")
+        # # parent directory and FORMULA are explicitly written into the archive
+        # if (
+        #     mpath == "{}/FORMULA".format(self.formula_conf["name"])
+        #     or mpath == "{}/FORMULA".format(self.abspath)
+        # ):
+        #     print('excluded')
+        #     return ret_exclude
 
         for pat in self.formula_conf.get(
             "spm_build_exclude", self.opts["spm_build_exclude"]

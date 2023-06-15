@@ -27,8 +27,8 @@ def formula_contents(formula_definition):
             "FORMULA",
             (
                 "name: {name}\n"
-                "version: '{version}'\n"
-                "release: '{release}'\n"
+                "version: {version}\n"
+                "release: {release}\n"
                 "summary: {summary}\n"
                 "description: {description}"
             ).format(**formula_definition),
@@ -47,9 +47,9 @@ def invalid_formula_contents(formula_definition):
             "FORMULA",
             (
                 "name: {name}\n"
-                "version: {version}\n"
+                "version: null\n"
                 "release: {release}\n"
-                "description: {description}"
+                "description: 123"
             ).format(**formula_definition),
         ),
     )
@@ -159,10 +159,8 @@ def test_build_install_invalid_formula(client, invalid_formulas_dir):
     client.run(["build", invalid_formulas_dir])
     assert not client.ui._status
     assert client.ui._error == [
-        "Missing FORMULA fields: summary; "
-        "Incorrect FORMULA field types: "
-        "version (expected: str, actual: float), "
-        "release (expected: str, actual: int)"
+        "Missing FORMULA fields: summary; Incorrect FORMULA field types: "
+        "version (expected: str|int|float, actual: NoneType), description (expected: str, actual: int)"
     ]
 
 
@@ -174,10 +172,19 @@ def test_build_install(client, formulas_dir, minion_config, formula):
     assert os.path.exists(pkgpath)
     # Install package
     client.run(["local", "install", pkgpath])
+    # The FORMULA file is not installed
+    root_dir = minion_config["file_roots"]["base"][0]
+    assert not os.path.exists(
+        os.path.join(
+            root_dir,
+            formula.definition["name"],
+            "FORMULA",
+        )
+    )
     # Check filesystem
     for path, contents in formula.contents:
         path = os.path.join(
-            minion_config["file_roots"]["base"][0],
+            root_dir,
             formula.definition["name"],
             path,
         )
@@ -270,6 +277,9 @@ def test_failure_paths(client, fail_args):
         ([r"exclude\d"], "/path1/exclude12", True),
         ([r"exclude\d"], "/path1/excluded", False),
         ([r"exclude\d", "all"], "/path1/all-excluded", True),
+        # Always excluded
+        (None, "formula1/FORMULA", True),
+        ([r"exclude\d"], "/path1/FORMULA", True),
     ],
 )
 def test_exclude(formula_exclude, member, result, client):
