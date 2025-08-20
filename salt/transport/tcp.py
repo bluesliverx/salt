@@ -224,7 +224,6 @@ class PublishClient(salt.transport.base.PublishClient):
         self.connected = False
         self._closing = False
         self._stream = None
-        self._closing = False
         self._closed = False
         self.backoff = opts.get("tcp_reconnect_backoff", 1)
         self.resolver = kwargs.get("resolver")
@@ -1728,6 +1727,10 @@ class RequestClient(salt.transport.base.RequestClient):
         self.backoff = opts.get("tcp_reconnect_backoff", 1)
         self.ssl = self.opts.get("ssl", None)
 
+    # pylint: disable=W1701
+    def __del__(self):
+        self.close()
+
     async def getstream(self, **kwargs):
         if self.source_ip or self.source_port:
             kwargs.update(source_ip=self.source_ip, source_port=self.source_port)
@@ -1791,7 +1794,7 @@ class RequestClient(salt.transport.base.RequestClient):
                                 message_id,
                             )
             except tornado.iostream.StreamClosedError as e:
-                log.error(
+                log.debug(
                     "tcp stream to %s:%s closed, unable to recv",
                     self.host,
                     self.port,
